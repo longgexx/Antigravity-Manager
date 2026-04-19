@@ -287,6 +287,10 @@ pub struct ExperimentalConfig {
     /// 上下文压缩阈值 L3 (Fork + Summary)
     #[serde(default = "default_threshold_l3")]
     pub context_compression_threshold_l3: f32,
+
+    /// 启用缓存推测 (Cache Speculation)
+    #[serde(default = "default_true")]
+    pub enable_cache_speculation: bool,
 }
 
 impl Default for ExperimentalConfig {
@@ -299,6 +303,7 @@ impl Default for ExperimentalConfig {
             context_compression_threshold_l1: 0.4,
             context_compression_threshold_l2: 0.55,
             context_compression_threshold_l3: 0.7,
+            enable_cache_speculation: true,
         }
     }
 }

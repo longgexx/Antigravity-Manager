@@ -115,6 +115,7 @@ pub struct AppState {
     pub port: u16,                     // [NEW] 本地监听端口 (v4.0.8 修复)
     pub proxy_pool_state: Arc<tokio::sync::RwLock<crate::proxy::config::ProxyPoolConfig>>, // [FIX Web Mode]
     pub proxy_pool_manager: Arc<crate::proxy::proxy_pool::ProxyPoolManager>, // [FIX Web Mode]
+    pub cache_manager: Arc<tokio::sync::Mutex<crate::proxy::mappers::cache_speculation::CacheManager>>,
 }
 
 // 为 AppState 实现 FromRef，以便中间件提取 security 状态
@@ -359,6 +360,11 @@ impl AxumServer {
             port,
             proxy_pool_state: proxy_pool_state.clone(),
             proxy_pool_manager: proxy_pool_manager.clone(),
+            cache_manager: Arc::new(tokio::sync::Mutex::new(
+                crate::proxy::mappers::cache_speculation::CacheManager::new(
+                    crate::proxy::mappers::cache_speculation::ManagerConfig::default(),
+                ),
+            )),
         };
 
         // 构建路由 - 使用新架构的 handlers！

@@ -19,6 +19,10 @@ pub fn get_context_limit_for_model(model: &str) -> u32 {
 }
 
 pub fn to_claude_usage(usage_metadata: &super::models::UsageMetadata, scaling_enabled: bool, context_limit: u32) -> super::models::Usage {
+    to_claude_usage_with_estimation(usage_metadata, scaling_enabled, context_limit, None)
+}
+
+pub fn to_claude_usage_with_estimation(usage_metadata: &super::models::UsageMetadata, scaling_enabled: bool, context_limit: u32, cache_estimation: Option<&super::super::cache_speculation::Estimation>) -> super::models::Usage {
     let prompt_tokens = usage_metadata.prompt_token_count.unwrap_or(0);
     let cached_tokens = usage_metadata.cached_content_token_count.unwrap_or(0);
 
@@ -89,6 +93,21 @@ pub fn to_claude_usage(usage_metadata: &super::models::UsageMetadata, scaling_en
         (scaled_total, None)
     };
     
+    if let Some(est) = cache_estimation {
+        if est.estimated && (est.cache_read_tokens > 0 || est.cache_creation_tokens > 0) {
+            let cache_read = est.cache_read_tokens;
+            let cache_creation = est.cache_creation_tokens;
+            let input = scaled_total.saturating_sub(cache_read).saturating_sub(cache_creation).max(1);
+            return super::models::Usage {
+                input_tokens: input,
+                output_tokens: usage_metadata.candidates_token_count.unwrap_or(0),
+                cache_read_input_tokens: if cache_read > 0 { Some(cache_read) } else { None },
+                cache_creation_input_tokens: if cache_creation > 0 { Some(cache_creation) } else { Some(0) },
+                server_tool_use: None,
+            };
+        }
+    }
+
     super::models::Usage {
         input_tokens: reported_input,
         output_tokens: usage_metadata.candidates_token_count.unwrap_or(0),

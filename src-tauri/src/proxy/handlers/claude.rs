@@ -345,6 +345,26 @@ pub async fn handle_messages(
         }
     };
 
+    // [NEW] 缓存推测 — 必须在剥离 cache_control 前执行
+    let cache_estimation = if state.experimental.read().await.enable_cache_speculation && !use_zai {
+        let cache_session_id = headers
+            .get("x-session-id")
+            .or_else(|| headers.get("anthropic-session-id"))
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        let mut mgr = state.cache_manager.lock().await;
+        let estimator = mgr.get_estimator(&request.model, &cache_session_id);
+        let est = estimator.estimate(&original_body, &request.model);
+        tracing::info!(
+            "[{}] [CacheSpeculation] source={}, read={}, creation={}, uncached={}",
+            trace_id, est.source, est.cache_read_tokens, est.cache_creation_tokens, est.uncached_tokens
+        );
+        Some(est)
+    } else {
+        None
+    };
+
     // [CRITICAL FIX] 预先清理所有消息中的 cache_control 字段 (Issue #744)
     // 必须在序列化之前处理，以确保 z.ai 和 Google Flow 都不受历史消息缓存标记干扰
     clean_cache_control_from_messages(&mut request.messages);
@@ -958,6 +978,7 @@ pub async fn handle_messages(
                     current_message_count, // [NEW v4.0.0] Pass message count for rewind detection
                     client_adapter.clone(), // [NEW] Pass client adapter
                     registered_tool_names, // [FIX #MCP] Pass tool names for fuzzy matching
+                    cache_estimation.clone(),
                 );
 
                 let mut first_data_chunk = None;
@@ -1118,6 +1139,7 @@ pub async fn handle_messages(
                     s_id_owned,
                     request_with_mapped.model.clone(),
                     request_with_mapped.messages.len(), // [NEW v4.0.0] Pass message count for rewind detection
+                    cache_estimation.clone(),
                 ) {
                     Ok(r) => r,
                     Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("Transform error: {}", e)).into_response(),

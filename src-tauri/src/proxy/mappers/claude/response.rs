@@ -2,7 +2,7 @@
 // 对应 NonStreamingProcessor
 
 use super::models::*;
-use super::utils::to_claude_usage;
+use super::utils::{to_claude_usage, to_claude_usage_with_estimation};
 use serde_json::json;
 
 /// Known parameter remappings for Gemini → Claude compatibility
@@ -158,6 +158,7 @@ pub struct NonStreamingProcessor {
     pub session_id: Option<String>,
     pub model_name: String,
     pub message_count: usize, // [NEW v4.0.0] Message count for rewind detection
+    pub cache_estimation: Option<crate::proxy::mappers::cache_speculation::Estimation>,
 }
 
 impl NonStreamingProcessor {
@@ -174,6 +175,7 @@ impl NonStreamingProcessor {
             session_id,
             model_name,
             message_count,
+            cache_estimation: None,
         }
     }
 
@@ -513,7 +515,7 @@ impl NonStreamingProcessor {
         let usage = gemini_response
             .usage_metadata
             .as_ref()
-            .map(|u| to_claude_usage(u, self.scaling_enabled, self.context_limit))
+            .map(|u| to_claude_usage_with_estimation(u, self.scaling_enabled, self.context_limit, self.cache_estimation.as_ref()))
             .unwrap_or(Usage {
                 input_tokens: 0,
                 output_tokens: 0,
@@ -544,8 +546,10 @@ pub fn transform_response(
     session_id: Option<String>,
     model_name: String,
     message_count: usize, // [NEW v4.0.0] Message count for rewind detection
+    cache_estimation: Option<crate::proxy::mappers::cache_speculation::Estimation>,
 ) -> Result<ClaudeResponse, String> {
     let mut processor = NonStreamingProcessor::new(session_id, model_name, message_count);
+    processor.cache_estimation = cache_estimation;
     Ok(processor.process(gemini_response, scaling_enabled, context_limit))
 }
 
@@ -589,6 +593,7 @@ mod tests {
             None,
             "gemini-2.5-flash".to_string(),
             1,
+            None,
         );
         assert!(result.is_ok());
 
@@ -646,6 +651,7 @@ mod tests {
             None,
             "gemini-2.5-flash".to_string(),
             1,
+            None,
         );
         assert!(result.is_ok());
 

@@ -2,7 +2,7 @@
 // 对应 StreamingState + PartProcessor
 
 use super::models::*;
-use super::utils::to_claude_usage;
+use super::utils::{to_claude_usage, to_claude_usage_with_estimation};
 use crate::proxy::mappers::estimation_calibrator::get_calibrator;
 // use crate::proxy::mappers::signature_store::store_thought_signature; // Deprecated
 use crate::proxy::SignatureCache;
@@ -234,6 +234,7 @@ pub struct StreamingState {
     pub client_adapter: Option<std::sync::Arc<dyn ClientAdapter>>, // [FIX] Remove Box, use Arc<dyn> directly
     // [FIX #MCP] Registered tool names for fuzzy matching
     pub registered_tool_names: Vec<String>,
+    pub cache_estimation: Option<crate::proxy::mappers::cache_speculation::Estimation>,
 }
 
 impl StreamingState {
@@ -263,6 +264,7 @@ impl StreamingState {
             message_count: 0,
             client_adapter: None,
             registered_tool_names: Vec::new(),
+            cache_estimation: None,
         }
     }
 
@@ -295,7 +297,7 @@ impl StreamingState {
         let usage = raw_json
             .get("usageMetadata")
             .and_then(|u| serde_json::from_value::<UsageMetadata>(u.clone()).ok())
-            .map(|u| to_claude_usage(&u, self.scaling_enabled, self.context_limit));
+            .map(|u| to_claude_usage_with_estimation(&u, self.scaling_enabled, self.context_limit, self.cache_estimation.as_ref()));
 
         let mut message = json!({
             "id": raw_json.get("responseId")
@@ -507,7 +509,7 @@ impl StreamingState {
                         );
                     }
                 }
-                to_claude_usage(u, self.scaling_enabled, self.context_limit)
+                to_claude_usage_with_estimation(u, self.scaling_enabled, self.context_limit, self.cache_estimation.as_ref())
             })
             .unwrap_or(Usage {
                 input_tokens: 0,

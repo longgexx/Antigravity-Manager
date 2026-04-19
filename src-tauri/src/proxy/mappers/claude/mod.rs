@@ -33,6 +33,7 @@ pub fn create_claude_sse_stream<S, E>(
     message_count: usize, // [NEW v4.0.0] Message count for rewind detection
     client_adapter: Option<std::sync::Arc<dyn ClientAdapter>>, // [NEW] Adapter reference
     registered_tool_names: Vec<String>, // [FIX #MCP] Tool names for fuzzy matching
+    cache_estimation: Option<super::cache_speculation::Estimation>,
 ) -> Pin<Box<dyn Stream<Item = Result<Bytes, String>> + Send>> 
 where
     S: Stream<Item = Result<Bytes, E>> + Send + ?Sized + 'static,
@@ -51,6 +52,7 @@ where
         state.estimated_prompt_tokens = estimated_prompt_tokens; // [FIX] Pass estimated tokens
         state.set_client_adapter(client_adapter); // [NEW] Set adapter
         state.set_registered_tool_names(registered_tool_names); // [FIX #MCP] Set tool names
+        state.cache_estimation = cache_estimation;
         let mut buffer = BytesMut::new();
 
         loop {
@@ -513,6 +515,7 @@ mod tests {
             1, // message_count
             None, // client_adapter
             Vec::new(), // registered_tool_names
+            None, // cache_estimation
         );
 
         // 3. 收集输出
